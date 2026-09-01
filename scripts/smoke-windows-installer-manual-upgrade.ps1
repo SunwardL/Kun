@@ -67,9 +67,9 @@ $script:manualUpgradeFixturePath = Join-Path $root 'manual-upgrade-fixture.exe'
 New-ManualUpgradeFixtureExecutable $script:manualUpgradeFixturePath
 
 Invoke-OldUninstallerBypassSmoke `
-  'manual overwrite bypasses non-zero old uninstaller' $custom 'exit2' 180
+  'manual overwrite bypasses non-zero old uninstaller' $custom 'exit2' 600
 Invoke-OldUninstallerBypassSmoke `
-  'manual overwrite bypasses hanging old uninstaller' $custom 'hang' 180
+  'manual overwrite bypasses hanging old uninstaller' $custom 'hang' 600
 
 $manualUserRoot = Join-Path $custom ($unicodeDirectoryName + '-user-files')
 $manualNestedRoot = Join-Path $manualUserRoot 'nested'

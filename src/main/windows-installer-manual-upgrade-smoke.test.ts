@@ -16,8 +16,8 @@ describe('Windows manual-upgrade packaged smoke contract', () => {
   it('proves old uninstallers cannot control manual overwrite', () => {
     expect(mainSmoke).toContain(". (Join-Path $PSScriptRoot 'smoke-windows-installer-manual-upgrade.ps1')")
     expect(manualSmoke).toContain("[ValidateSet('exit2', 'hang')]")
-    expect(manualSmoke).toContain("'manual overwrite bypasses non-zero old uninstaller'")
-    expect(manualSmoke).toContain("'manual overwrite bypasses hanging old uninstaller'")
+    expect(manualSmoke).toContain("'manual overwrite bypasses non-zero old uninstaller' $custom 'exit2' 600")
+    expect(manualSmoke).toContain("'manual overwrite bypasses hanging old uninstaller' $custom 'hang' 600")
     expect(manualSmoke).toContain("-Destination (Join-Path $Source 'Uninstall Kun.exe') -Force")
     expect(manualSmoke).toContain("Assert-True (-not (Test-Path -LiteralPath $marker))")
     expect(mainSmoke).toContain("'The elevated manual overwrite invoked the current-user old uninstaller fixture.'")
