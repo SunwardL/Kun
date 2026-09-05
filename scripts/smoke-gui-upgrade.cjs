@@ -12,6 +12,7 @@ const { _electron: electron } = require('playwright-core')
 const { parse } = require('yaml')
 const { digest, startCandidateFeed, validateFeed } = require('./gui-upgrade-feed.cjs')
 const { verifyCandidateSource } = require('./release-candidate-source.cjs')
+const { verifyPrCandidateSource } = require('./pr-gui-candidate-source.cjs')
 const { attachGuiDiagnostics, captureMacProcesses, captureMacUpdateDiagnostics } = require('./gui-upgrade-diagnostics.cjs')
 const { createScenarioJournal, cleanupScenario, recordScenario } = require('./gui-upgrade-journal.cjs')
 const { createInstallRequestControl } = require('./install-request-control.cjs')
@@ -371,15 +372,19 @@ async function main() {
   if (!/^\d+\.\d+\.\d+$/.test(version ?? '')) throw new Error('--version is required')
   const checkout = await run('git', ['rev-parse', 'HEAD'])
   const harnessCommit = checkout.stdout.trim()
-  const candidateCommit = await verifyCandidateSource(version, process.env.CANDIDATE_TAG || `v${version}`,
-    process.env.CANDIDATE_COMMIT || harnessCommit)
+  const source = process.env.GUI_UPGRADE_SOURCE || 'release-candidate'
+  assert.ok(['pull-request', 'release-candidate'].includes(source), 'Unknown GUI upgrade candidate source')
+  const candidateCommit = source === 'pull-request'
+    ? await verifyPrCandidateSource(directory, version, harnessCommit)
+    : await verifyCandidateSource(version, process.env.CANDIDATE_TAG || `v${version}`,
+      process.env.CANDIDATE_COMMIT || harnessCommit)
   const manifestName = process.platform === 'win32' ? 'latest.yml' : 'latest-mac.yml'
   const { metadata } = await validateFeed(directory, manifestName, version)
   const candidateName = process.platform === 'win32' ? `Kun-${version}-win-x64.exe` : `Kun-${version}-mac-${process.arch}.zip`
   assert.ok(metadata.files.some((file) => file.url === candidateName))
   const downloads = await mkdtemp(join(tmpdir(), 'kun-upgrade-baseline-'))
   const baselineName = process.platform === 'win32' ? 'Kun-0.3.7-win-x64.exe' : `Kun-0.3.7-mac-${process.arch}.zip`
-  const report = { version, commit: candidateCommit, harnessCommit, platform: process.platform, arch: process.arch,
+  const report = { version, source, commit: candidateCommit, harnessCommit, platform: process.platform, arch: process.arch,
     artifact: candidateName, sha512: await digest(join(directory, candidateName)), scenarios: [],
     status: 'running', phase: 'baseline_download', cleanupErrors: [] }
   const output = resolve(flags.get('--report') || `gui-upgrade-${process.platform}.json`)
