@@ -13,7 +13,7 @@ const { parse } = require('yaml')
 const { digest, startCandidateFeed, validateFeed } = require('./gui-upgrade-feed.cjs')
 const { verifyCandidateSource } = require('./release-candidate-source.cjs')
 const { verifyPrCandidateSource } = require('./pr-gui-candidate-source.cjs')
-const { attachGuiDiagnostics, captureMacProcesses, captureMacUpdateDiagnostics } = require('./gui-upgrade-diagnostics.cjs')
+const { closeGuiWithExitEvidence, attachGuiDiagnostics, captureMacProcesses, captureMacUpdateDiagnostics } = require('./gui-upgrade-diagnostics.cjs')
 const { createScenarioJournal, cleanupScenario, recordScenario } = require('./gui-upgrade-journal.cjs')
 const { createInstallRequestControl } = require('./install-request-control.cjs')
 const { inspectSignedBundle, verifyMacCandidate, waitForBundleReplacement, waitForMacRelaunch } = require('./mac-upgrade-observation.cjs')
@@ -232,7 +232,7 @@ async function scenario(input, name, record, persistReport) {
     await writeFile(join(root, 'upgrade-source.json'), JSON.stringify({ oldPid, oldRuntime, oldManager, executable }, null, 2))
     if (name === 'manual') {
       journal.phase('manual_installation')
-      await gui.app.close()
+      record.baselineCloseProof = await closeGuiWithExitEvidence(gui, journal.eventPath, TIMEOUT)
       gui = undefined
       await install(input.candidate, installParent, environment)
     } else {
@@ -347,7 +347,9 @@ async function scenario(input, name, record, persistReport) {
     await gui.page.screenshot({ path: join(root, 'after.png') })
     record.version = expectedVersion
     journal.phase('post_upgrade_verified', { version: expectedVersion, pid: gui.processInfo.pid })
-    await gui.app.close()
+    journal.phase('closing_inspection_gui')
+    record.inspectionCloseProof = await closeGuiWithExitEvidence(gui, journal.eventPath, TIMEOUT)
+    journal.phase('inspection_gui_closed', record.inspectionCloseProof)
     gui = undefined
   } catch (error) {
     failure = error
@@ -365,7 +367,9 @@ async function scenario(input, name, record, persistReport) {
       // Stop only this scenario's executable before waiting on Playwright.
       ['stop-installed-gui', () => stopInstalledGui(executable)],
       ['close-gui', async () => {
-        if (gui?.processInfo?.pid && processIsAlive(gui.processInfo.pid)) await gui.app.close()
+        if (gui?.processInfo?.pid && processIsAlive(gui.processInfo.pid)) {
+          await closeGuiWithExitEvidence(gui, journal.eventPath, TIMEOUT)
+        }
       }],
       ['stop-owned-manager', async () => {
         const manager = await readFile(join(controlDir, 'manager.json'), 'utf8').then(parseInstallerJson).catch(() => null)
