@@ -14,7 +14,8 @@ const { digest, startCandidateFeed, validateFeed } = require('./gui-upgrade-feed
 const { verifyCandidateSource } = require('./release-candidate-source.cjs')
 const { verifyPrCandidateSource } = require('./pr-gui-candidate-source.cjs')
 const { closeGuiWithExitEvidence, attachGuiDiagnostics, captureMacProcesses, captureMacUpdateDiagnostics } = require('./gui-upgrade-diagnostics.cjs')
-const { createScenarioJournal, cleanupScenario, recordScenario } = require('./gui-upgrade-journal.cjs')
+const { createScenarioJournal, cleanupScenario, recordScenario,
+  claimScenarioDirectory, preserveScenarioDirectory } = require('./gui-upgrade-journal.cjs')
 const { createInstallRequestControl } = require('./install-request-control.cjs')
 const { inspectSignedBundle, verifyMacCandidate, waitForBundleReplacement, waitForMacRelaunch } = require('./mac-upgrade-observation.cjs')
 const {
@@ -163,6 +164,7 @@ async function scenario(input, name, record, persistReport) {
   const home = homedir()
   const appData = process.platform === 'win32' ? process.env.APPDATA : join(home, 'Library', 'Application Support')
   const userData = join(appData, 'Kun')
+  const installerRecovery = join(appData, 'KunInstallerRecovery')
   const workspace = join(root, 'workspace')
   const dataDir = join(root, 'runtime-data')
   const controlDir = join(home, '.kun', 'control')
@@ -178,6 +180,9 @@ async function scenario(input, name, record, persistReport) {
   await mkdir(join(home, '.kun'), { recursive: true })
   await mkdir(controlDir)
   await writeFile(join(controlDir, '.upgrade-acceptance-owner'), root)
+  // NSIS uses a fixed per-account transaction path across installations.
+  // Own and preserve it like the profile so subsequent scenarios start clean.
+  if (process.platform === 'win32') await claimScenarioDirectory(installerRecovery, root)
   const model = await startModelFixture()
   const environment = createGuiUpgradeEnvironment(process.env, {
     home, appData, localAppData: process.env.LOCALAPPDATA || join(root, 'cache'), temporaryDirectory: root
@@ -391,6 +396,11 @@ async function scenario(input, name, record, persistReport) {
           '$p.WaitForExit(); $p.Refresh(); if ($p.ExitCode -ne 0) { throw "Uninstall failed" }', environment)
       }],
       ['close-model-fixture', () => model.close()],
+      ['preserve-owned-installer-recovery', async () => {
+        if (process.platform === 'win32') {
+          await preserveScenarioDirectory(installerRecovery, root, 'installer-recovery')
+        }
+      }],
       ['preserve-owned-profile', async () => {
         assert.equal(await readFile(join(userData, '.upgrade-acceptance-owner'), 'utf8'), root,
           'Refusing to move a profile not owned by this acceptance scenario')
